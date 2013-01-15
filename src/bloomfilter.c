@@ -4,10 +4,42 @@
 #include <errno.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include "md5.h"
 
 #include "bloomfilter.h"
 
-BloomFilter *bloomfilter_Create(size_t max_num_elem, double error_rate,
+BloomFilter *bloomfilter_Create_Malloc(size_t max_num_elem, double error_rate,
+                                BTYPE num_bits, int *hash_seeds, int num_hashes)
+{
+    BloomFilter * bf = (BloomFilter *)malloc(sizeof(BloomFilter));
+    MBArray * array;
+
+    if (!bf) {
+        return NULL;
+    }
+
+    bf->max_num_elem = max_num_elem;
+    bf->error_rate = error_rate;
+    bf->num_hashes = num_hashes;
+    bf->count_correct = 1;
+    bf->bf_version = BF_CURRENT_VERSION;
+    bf->elem_count = 0;
+    bf->array = NULL;
+    memset(bf->reserved, 0, sizeof(uint32_t) * 32);
+    memset(bf->hash_seeds, 0, sizeof(uint32_t) * 256);
+    memcpy(bf->hash_seeds, hash_seeds, sizeof(uint32_t) * num_hashes);
+    array = mbarray_Create_Malloc(num_bits);
+    if (!array) {
+        bloomfilter_Destroy(bf);
+        return NULL;
+    }
+
+    bf->array = array;
+
+    return bf;
+}
+
+BloomFilter *bloomfilter_Create_Mmap(size_t max_num_elem, double error_rate,
                                 const char * file, BTYPE num_bits, int oflags, int perms,
                                 int *hash_seeds, int num_hashes)
 {
@@ -25,10 +57,10 @@ BloomFilter *bloomfilter_Create(size_t max_num_elem, double error_rate,
     bf->bf_version = BF_CURRENT_VERSION;
     bf->elem_count = 0;
     bf->array = NULL;
-    memset(bf->reserved, sizeof(uint32_t) * 32, 0);
-    memset(bf->hash_seeds, sizeof(uint32_t) * 256, 0);
+    memset(bf->reserved, 0,  sizeof(uint32_t) * 32);
+    memset(bf->hash_seeds, 0, sizeof(uint32_t) * 256);
     memcpy(bf->hash_seeds, hash_seeds, sizeof(uint32_t) * num_hashes);
-    array = mbarray_Create(num_bits, file, (char *)bf, sizeof(BloomFilter), oflags, perms);
+    array = mbarray_Create_Mmap(num_bits, file, (char *)bf, sizeof(BloomFilter), oflags, perms);
     if (!array) {
         bloomfilter_Destroy(bf);
         return NULL;
@@ -112,6 +144,18 @@ BloomFilter * bloomfilter_Copy_Template(BloomFilter * src, char * filename, int 
     return bf;
 }
 
+
+uint32_t _hash_long(uint32_t hash_seed, Key * key) {
+    Key newKey = {
+        .shash = (char *)&key->nhash,
+        .nhash = sizeof(key->nhash)
+    };
+
+    return _hash_char(hash_seed, &newKey);
+}
+
+/*
+CODE FOR djb HASH...
 uint32_t _hash_char(uint32_t hash_seed, Key * key) {
     register uint32_t result = 5381 ^ hash_seed;
     register unsigned char * ptr = (unsigned char *)key->shash;
@@ -122,10 +166,46 @@ uint32_t _hash_char(uint32_t hash_seed, Key * key) {
     return result;
 }
 
-uint32_t _hash_long(uint32_t hash_seed, Key * key) {
-    return 5381 + (33 * (key->nhash ^ hash_seed));
+CODE TO USE SHA512..
+*/
+#include <openssl/evp.h>
+
+uint32_t _hash_char(uint32_t hash_seed, Key * key) {
+    EVP_MD_CTX ctx;
+    unsigned char result_buffer[64];
+
+    EVP_MD_CTX_init(&ctx);
+
+    EVP_DigestInit_ex(&ctx, EVP_sha512(), NULL);
+    EVP_DigestUpdate(&ctx, (const unsigned char *)&hash_seed, sizeof(hash_seed));
+    EVP_DigestUpdate(&ctx, (const unsigned char *)key->shash, key->nhash);
+    EVP_DigestFinal_ex(&ctx, (unsigned char *)&result_buffer, NULL);
+    EVP_MD_CTX_cleanup(&ctx);
+    return *(uint32_t *)result_buffer;
+}
+/*
+CODE TO USE md5sum
+
+#include "md5.h"
+uint32_t _hash_char(uint32_t hash_seed, Key * key) {
+    md5_state_t state;
+    md5_byte_t result[16];
+    int i;
+
+    md5_init(&state);
+    md5_append(&state, (md5_byte_t *)&hash_seed, sizeof(uint32_t));
+    md5_append(&state, (md5_byte_t *)key->shash, key->nhash);
+    md5_finish(&state, result);
+    return *(uint32_t *)(&result[4]);
 }
 
+
+/ * Code for SuperFast * /
+#include "superfast.h"
+uint32_t _hash_char(uint32_t hash_seed, Key * key) {
+	return SuperFastHash(key->shash, key->nhash, hash_seed);
+}
+*/
 
 #if 0
 int main(int argc, char **argv)

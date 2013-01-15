@@ -10,7 +10,7 @@ BloomFilter Class Reference
 .. moduleauthor:: Michael Axiak <mike@axiak.net>
 
 
-.. class:: BloomFilter(capacity : int, error_rate : float, filename : string)
+.. class:: BloomFilter(capacity : int, error_rate : float, [filename=None : string], [perm=0755])
 
    Create a new BloomFilter object with a given capacity and error_rate.
    **Note that we do not check capacity.** This is important, because

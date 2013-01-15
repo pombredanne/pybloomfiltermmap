@@ -76,15 +76,17 @@ I have a simple benchmark in `test/speedtest.py <http://github.com/axiak/pybloom
 this module to the good
 `pybloom module <http://github.com/jaybaird/python-bloomfilter/>`_::
 
+
     (pybloom module)
-    pybloom load took 2.70 s/run
-    pybloom tests took 0.61 s/run
+    pybloom load took 0.76436 s/run
+    pybloom tests took 0.16205 s/run
     Errors: 0.25% positive 0.00% negative
 
     (this module)
-    pybloomfilter load took 0.23 s/run [1200% faster]
-    pybloomfilter tests took 0.03 s/run [2000% faster]
-    Errors: 0.03% positive 0.00% negative
+    pybloomfilter load took 0.05423 s/run
+    pybloomfilter tests took 0.00659 s/run
+    Errors: 0.26% positive 0.00% negative
+
 
 In this test we just looked at adding words from a dictionary file,
 then testing to see if each word of another file was in the dictionary.
@@ -99,15 +101,20 @@ module is an obvious win.
 Install
 ---------------------
 
-Unfortunately at the time I only support systems with a nice build environment
-(Linux, OS X, ..). However, I know people build Cython code on Win32 all the
-time, I just don't want to spend time to get it to work.
-So, to install on a computer with gcc:
+You do not need Cython to install from sources, since I keep a cached version
+of the c output in the source distribution. Thus, to install you should only
+need to run::
 
- 1. Download and install `Cython <http://www.cython.org/#download>`_.
- 2. Download `the latest release <http://code.google.com/p/python-bloom-filter/downloads/list>`_.
- 3. Untar the file
- 4. Type $ "sudo python setup.py install"
- 5. Done!
+    $ sudo pip install pybloomfiltermmap
 
+You can also download the latest tar file from the `github tags <https://github.com/axiak/pybloomfiltermmap/tags>`_. Once you download it, you should only have to run::
 
+    $ sudo python setup.py install
+
+to build and install the module.
+
+Develop
+-----------------------
+
+To develop you will need Cython. The setup.py script should automatically
+build from Cython source if the Cython module is available.

@@ -1,3 +1,24 @@
+0.3.6 2012-10-21)
+ - Minor cosmetic changes to reduce noise in clang. Might have fixed
+   cryptolib linking error.                                              [BUG]
+
+0.3.6 2012-09-04)
+ - Fixed memory leak in SHA512 computation. Thanks pbutler!              [BUG]
+
+0.3.2 2011-12-07)
+ - Fixed segfault when using non-strings as values.                      [BUG]
+
+0.3.1 2011-12-07)
+ - Fixed casting of size_t for very large bloom filters.                 [BUG]
+ - Added option to use standard memory (rather than mmap) to back the bloom filter.
+   (Specify None or '' as the argument to file name.)                    [FEATURE]
+ - Changed hash to use a "superfast" hash rather than md5 since md5 is
+   unnecessarily slow.                                                   [FEATURE]
+
+0.2.0 2011-11-13)
+ - Fixed hashing to use md5 hash and change the bit computation to pass
+   accuracy test.                                                        [BUG]
+
 0.1.28 2011-03-12)
  - Added check to ensure that the required permissions are available when
    opening a file.                                                       [BUG]

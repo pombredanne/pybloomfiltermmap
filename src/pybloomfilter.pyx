@@ -1,9 +1,11 @@
-VERSION = (0, 2, 0)
+VERSION = (0, 3, 11)
 AUTHOR = "Michael Axiak"
+
+__VERSION__ = VERSION
 
 
 cimport cbloomfilter
-cimport python_exc
+cimport cpython
 
 import random
 import os
@@ -43,13 +45,14 @@ class IndeterminateCountError(ValueError):
 cdef class BloomFilter:
     """
     The BloomFilter class implements a bloom filter that uses mmap'd files.
-    For more information on what a bloom filter is, please read the Wikipedia article about it.  
+    For more information on what a bloom filter is, please read the Wikipedia article about it.
     """
     cdef cbloomfilter.BloomFilter * _bf
     cdef int _closed
 
-    def __cinit__(self, capacity, error_rate, filename, perm=0755):
+    def __cinit__(self, capacity, error_rate, filename=None, perm=0755):
         cdef char * seeds
+        cdef long long num_bits
         _closed = 0
         mode = "rw+"
         if filename is NoConstruct:
@@ -69,7 +72,7 @@ cdef class BloomFilter:
 
         if not mode & os.O_CREAT:
             if os.path.exists(filename):
-                self._bf = cbloomfilter.bloomfilter_Create(capacity,
+                self._bf = cbloomfilter.bloomfilter_Create_Mmap(capacity,
                                                            error_rate,
                                                            filename,
                                                            0,
@@ -82,19 +85,29 @@ cdef class BloomFilter:
                 raise OSError(eno.ENOENT, '%s: %s' % (os.strerror(eno.ENOENT),
                                                       filename))
         else:
-            if os.path.exists(filename):
+            # Make sure that if the filename is defined, that the
+            # file exists
+            if filename and os.path.exists(filename):
                 os.unlink(filename)
-            num_bits = 5 * math.ceil((capacity * math.log(error_rate)) / math.log(1.0 /
-                                                                  (math.pow(2.0,
-                                                                            math.log(2.0)))))
-            num_bits = cbloomfilter.next_prime(num_bits)
-            num_hashes = int(math.ceil(math.log(2.0) * num_bits / capacity))
+
+            num_hashes = int(math.ceil(math.log(1.0 / error_rate, 2.0)))
+            bits_per_hash = int(math.ceil(
+                    (2.0 * capacity * abs(math.log(error_rate))) /
+                    (num_hashes * (math.log(2) ** 2))))
+
+            num_bits = num_hashes * bits_per_hash
+            #num_bits = cbloomfilter.next_prime(num_bits)
+            #num_hashes = int(math.ceil(math.log(2.0) * num_bits / capacity))
+
             hash_seeds = array.array('I')
             hash_seeds.extend([random.getrandbits(32) for i in range(num_hashes)])
             test = hash_seeds.tostring()
             seeds = test
 
-            self._bf = cbloomfilter.bloomfilter_Create(capacity,
+            # If a filename is provided, we should make a mmap-file
+            # backed bloom filter. Otherwise, it will be malloc
+            if filename:
+                self._bf = cbloomfilter.bloomfilter_Create_Mmap(capacity,
                                                        error_rate,
                                                        filename,
                                                        num_bits,
@@ -102,12 +115,18 @@ cdef class BloomFilter:
                                                        perm,
                                                        <int *>seeds,
                                                        num_hashes)
+            else:
+                self._bf = cbloomfilter.bloomfilter_Create_Malloc(capacity,
+                                                       error_rate,
+                                                       num_bits,
+                                                       <int *>seeds,
+                                                       num_hashes)
             if self._bf is NULL:
-                python_exc.PyErr_NoMemory()
+                cpython.PyErr_NoMemory()
 
     def __dealloc__(self):
         cbloomfilter.bloomfilter_Destroy(self._bf)
-        self._bf = NULL        
+        self._bf = NULL
 
     property hash_seeds:
         def __get__(self):
@@ -127,6 +146,11 @@ cdef class BloomFilter:
             return self._bf.error_rate
 
     property num_hashes:
+        def __get__(self):
+            self._assert_open()
+            return self._bf.num_hashes
+
+    property num_slices:
         def __get__(self):
             self._assert_open()
             return self._bf.num_hashes
